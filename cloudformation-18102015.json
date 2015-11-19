@@ -404,14 +404,49 @@
          ]
       }
       },
-      "SimpleInstance" : {
-      "Type" : "AWS::EC2::Instance",
+      "Tomcat": {
+        "Type": "AWS::EC2::Instance",
+        "Metadata": {
+            "AWS::CloudFormation::Init": {
+                "config": {
+                    "packages": {
+                        "yum": {
+                            "tomcat7": [],
+                            "git": [],
+                            "elinks" : [],
+                            "httpd" : [],
+                            "tree" : []
+                        },
+                        "sources" : {
+              "/var/www/html"  : "http://ftp.drupal.org/files/projects/drupal-7.8.tar.gz",
+              "/home/ec2-user" : "http://ftp.drupal.org/files/projects/drush-7.x-4.5.tar.gz"
+            },
+              "files" : {
+              "/tmp/setup.mysql" : {
+                "content" : { "Fn::Join" : ["", [
+                  "CREATE DATABASE ", { "Ref" : "DBUser" }, ";\n",
+                  "CREATE USER '", { "Ref" : "DBUser" }, "'@'localhost' IDENTIFIED BY '", { "Ref" : "DBPassword" }, "';\n",
+                  "GRANT ALL ON ", { "Ref" : "DBUser" }, ".* TO '", { "Ref" : "DBPassword" }, "'@'localhost';\n",
+                  "FLUSH PRIVILEGES;\n"
+                  ]]},
+                "mode"  : "000644",
+                "owner" : "root",
+                "group" : "root"
+              }
+            },
+           
+                        
+                         "mode"    : "000755",
+                         "owner"   : "root",
+                          "group"   : "root"
+                    }
+                }
+            }
+        },
       "Properties" : {
         "KeyName" : { "Ref" : "KeyName" },
         "InstanceType" : { "Ref" : "InstanceType" },
-        "ImageId" : { "Fn::FindInMap" : [ "AWSRegionArch2AMI", { "Ref" : "AWS::Region" },
-                                          { "Fn::FindInMap" : [ "AWSInstanceType2Arch", { "Ref" : "InstanceType" },
-                                          "Arch" ] } ] },
+        "ImageId" : { "Fn::FindInMap" : [ "Ami", { "Ref" : "AWS::Region" }, "AMI" ]},
         "NetworkInterfaces" : [ 
           { "DeviceIndex" : "0",
             "AssociatePublicIpAddress" : "true",
@@ -420,11 +455,40 @@
             "GroupSet" : [ { "Ref" : "InstanceSecurityGroup" } ]
           }
         ],
-        "Tags" : [ 
+         "UserData"       : { "Fn::Base64" : { "Fn::Join" : ["", [
+      "#!/bin/bash\n",
+      "yum update -y aws-cfn-bootstrap\n",
+      "rm /var/lib/cloud/sem/user-scripts.*\n",
+      "cp /etc/hosts /etc/hosts_bkp\n",
+      "yum install curl wget\n",
+      "yum install python pip httpd\n",
+      "curl https://bootstrap.pypa.io/get-pip.py -o get-pip.py\n",
+      "python get-pip.py\n",
+      "pip install awscli\n",
+      "pip install --upgrade awscli\n",
+      "mkdir /root/.aws\n",
+      "echo \"[default]\" >> /root/.aws/credentials\n",
+      "echo \"aws_access_key_id = XXXXXXXXXX\" >> /root/.aws/credentials\n",
+      "echo \"aws_secret_access_key = XXXXXXXXXXXXXXX\" >> /root/.aws/credentials\n",
+      "echo \"[default]\" >> /root/.aws/config\n",
+      "echo \"output = text\" >> /root/.aws/config\n",
+      "echo \"region = us-east-1\" >> /root/.aws/config\n",
+      "aws rds describe-db-instances --output text --query 'DBInstances[*].Endpoint.Address' > /root/rds-endpoint\n",
+      "cd /root && wget https://s3.amazonaws.com/tndd/DBENDPOINT1.json\n",
+      "sed -i 's/AllowOverride None/'", { "Ref" : "DBUser" }, "'/g'  /etc/httpd/conf/httpd.conf\n",
+     "/opt/aws/bin/cfn-init -v -s ", { "Ref" : "AWS::StackName" },
+      "         -r Tomcat ",
+        "       --access-key XXXXXXXXXXXXX ",
+      "         --secret-key XXXXXXXXXXXXXXXX ",
+
+      "         --region ", { "Ref" : "AWS::Region" }, "\n"
+    
+    ]]}},
+    "Tags" : [ 
         {"Key": "Name", "Value": "CloudFormation_CMS"}
          ]
-      }
-    },
+      },
+      
     "RedisCluster" : {
       "Type": "AWS::ElastiCache::CacheCluster",
       "Properties": {
