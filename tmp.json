@@ -234,7 +234,7 @@
       "Type" : "AWS::EC2::Subnet",
       "Properties" : {
         "VpcId" : { "Ref" : "VPC" },
-        "AvailabilityZone" : "us-east-1d",
+        "AvailabilityZone" : "us-east-1b",
         "CidrBlock" : "10.0.1.0/24",
         "Tags" : [
           {"Key" : "Application", "Value" : { "Ref" : "AWS::StackId"} },
@@ -247,7 +247,7 @@
       "Type" : "AWS::EC2::Subnet",
       "Properties" : {
         "VpcId" : { "Ref" : "VPC" },
-        "AvailabilityZone" : "us-east-1e",
+        "AvailabilityZone" : "us-east-1a",
         "CidrBlock" : "10.0.2.0/24",
         "Tags" : [
           {"Key" : "Application", "Value" : { "Ref" : "AWS::StackId"} },
@@ -484,7 +484,7 @@
       "AllocatedStorage": "5",
       "DBInstanceClass": "db.t2.micro",
       "PubliclyAccessible": "false",
-      "AvailabilityZone" : "us-east-1e",
+      "AvailabilityZone" : "us-east-1a",
       "Engine": "MySQL",
       "VPCSecurityGroups"  : [ { "Ref" : "InstanceSecurityGroupPrivate" } ],
       "DBSubnetGroupName" : { "Ref" : "myDBSubnetGroup" },
@@ -515,22 +515,35 @@
         
         "ClusterName" : "testing",
       
-      "VpcSecurityGroupIds" : [ { "Ref" : "RedisClusterSecurityGroup" } ]       
+    "CacheSecurityGroupNames" : [ { "Ref" : "RedisClusterSecurityGroup" } ]     
       }
     },
 
    
-     "RedisClusterSecurityGroup" : {
+       "RedisClusterSecurityGroup": {
+      "Type": "AWS::ElastiCache::SecurityGroup",
+      "Properties": {
+        "Description"  : "Lock the cluster down"
+      }
+    },
+    "WebServerSecurityGroup" : {
       "Type" : "AWS::EC2::SecurityGroup",
       "Properties" : {
         "GroupDescription" : "Enable HTTP and SSH access",
-        "VpcId" : { "Ref" : "VPC" },
         "SecurityGroupIngress" : [
           {"IpProtocol" : "tcp", "FromPort" : "22", "ToPort" : "22", "CidrIp" : "0.0.0.0/0" },
           {"IpProtocol" : "tcp", "FromPort" : "80", "ToPort" : "80", "CidrIp" : "0.0.0.0/0"}
         ]
       }      
     },  
+
+    "RedisClusterSecurityGroupIngress": {
+      "Type": "AWS::ElastiCache::SecurityGroupIngress",
+      "Properties": {
+        "CacheSecurityGroupName"  : { "Ref" : "RedisClusterSecurityGroup" },
+        "EC2SecurityGroupName"    : { "Ref" : "WebServerSecurityGroup" }
+      }        
+    },
 
 
     "SubnetGroup" : {
