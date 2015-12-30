@@ -21,12 +21,6 @@
       "Default" : "t2.micro",
       "AllowedValues" : [ "t2.micro","m1.small","m1.medium","m1.large","m1.xlarge","m2.xlarge","m2.2xlarge","m2.4xlarge","m3.xlarge","m3.2xlarge","c1.medium","c1.xlarge","cc1.4xlarge","cc2.8xlarge","cg1.4xlarge"],
       "ConstraintDescription" : "must be a valid EC2 instance type."
-    },
-
-    "InstanceCount" : {
-      "Description" : "Number of EC2 instances to launch",
-      "Type" : "Number",
-      "Default" : "1"
     }
   },
 
@@ -243,10 +237,6 @@
     "AZ" : {
       "Description" : "Availability Zone of the newly created EC2 instance",
       "Value" : { "Fn::GetAtt" : [ "SimpleInstance", "AvailabilityZone" ] }
-    },
-    "PublicDNS" : {
-      "Description" : "Public DNSName of the newly created EC2 instance",
-      "Value" : { "Fn::GetAtt" : [ "SimpleInstance", "PublicDnsName" ] }
     },
     "PublicIP" : {
       "Description" : "Public IP address of the newly created EC2 instance",
