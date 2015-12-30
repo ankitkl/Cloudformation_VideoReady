@@ -1,7 +1,7 @@
 {
   "AWSTemplateFormatVersion" : "2010-09-09",
 
-  "Description" : "AWS CloudFormation Sample Template vpc_multiple_subnets.template: Sample template showing how to create a VPC with multiple subnets. The first subnet is public and contains the load balancer, the second subnet is private and contains an EC2 instance behind the load balancer. **WARNING** This template creates an Amazon EC2 instance. You will be billed for the AWS resources used if you create a stack from this template.",
+  "Description" : "TTND AWS CloudFormation template to lauch first Ec2Instance",
 
   "Parameters" : {
 
