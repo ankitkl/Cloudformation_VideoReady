@@ -1,0 +1,568 @@
+{
+  "AWSTemplateFormatVersion" : "2010-09-09",
+
+  "Description" : "AWS CloudFormation Sample Template vpc_multiple_subnets.template: Sample template showing how to create a VPC with multiple subnets. The first subnet is public and it contains the load balancer & EC2Instance behind the load balancer, the second subnet is private and it contains an EC2 instance under load balancer and RDS only traffic allows from Ec2Instance in public subnet . **WARNING** This template creates an Amazon EC2 instance. You will be billed for the AWS resources used if you create a stack from this template.",
+
+  "Parameters" : {
+
+    "KeyName" : {
+      "Description" : "EC2 Key Pair for SSH Access, you must have created these prior to running this.",
+      "Type" : "String",
+      "Default" : "your-key-name-goes-here", 
+      "MinLength": "1",
+      "MaxLength": "64",
+      "AllowedPattern" : "[-_ a-zA-Z0-9]*",
+      "ConstraintDescription" : "can contain only alphanumeric characters, spaces, dashes and underscores."
+    },
+
+    "InstanceType" : {
+      "Description" : "WebServer EC2 instance type",
+      "Type" : "String",
+      "Default" : "t2.micro",
+      "AllowedValues" : [ "t2.micro","m1.small","m1.medium","m1.large","m1.xlarge","m2.xlarge","m2.2xlarge","m2.4xlarge","m3.xlarge","m3.2xlarge","c1.medium","c1.xlarge","cc1.4xlarge","cc2.8xlarge","cg1.4xlarge"],
+      "ConstraintDescription" : "must be a valid EC2 instance type."
+    },
+
+    "InstanceCount" : {
+      "Description" : "Number of EC2 instances to launch",
+      "Type" : "Number",
+      "Default" : "1"
+    },
+
+    "DBUser" : {
+      "NoEcho": "true",
+      "Description" : "The database admin account username",
+      "Type": "String",
+      "MinLength": "1",
+      "MaxLength": "16",
+      "AllowedPattern": "[a-zA-Z][a-zA-Z0-9]*",
+      "ConstraintDescription": "must begin with a letter and contain only alphanumeric characters."
+    },
+    "ClusterNodeType" : {
+      "Default" : "cache.t2.micro",
+      "Description" : "The compute and memory capacity of the nodes in the  Redis Cluster",
+      "Type" : "String",
+      "AllowedValues" : [ "cache.t2.micro", "cache.m1.small", "cache.m1.medium", "cache.m1.large", "cache.m1.xlarge", "cache.m2.xlarge", "cache.m2.2xlarge", "cache.m2.4xlarge", "cache.m3.xlarge", "cache.m3.2xlarge", "cache.c1.xlarge" ],
+      "ConstraintDescription" : "must select a valid Cache Node type."
+    },
+
+    "DBPassword": {
+      "NoEcho": "true",
+      "Description": "The database admin account password",
+      "Type": "String",
+      "MinLength": "8",
+      "MaxLength": "41",
+      "AllowedPattern": "[a-zA-Z0-9]*", 
+      "ConstraintDescription": "must contain only alphanumeric characters."
+    }
+  },
+
+  "Mappings" : {
+    "AWSInstanceType2Arch" : {
+      "t2.micro"    : { "Arch" : "64" },
+      "m1.small"    : { "Arch" : "64" },
+      "m1.medium"   : { "Arch" : "64" },
+      "m1.large"    : { "Arch" : "64" },
+      "m1.xlarge"   : { "Arch" : "64" },
+      "m2.xlarge"   : { "Arch" : "64" },
+      "m2.2xlarge"  : { "Arch" : "64" },
+      "m2.4xlarge"  : { "Arch" : "64" },
+      "m3.xlarge"   : { "Arch" : "64" },
+      "m3.2xlarge"  : { "Arch" : "64" },
+      "c1.medium"   : { "Arch" : "64" },
+      "c1.xlarge"   : { "Arch" : "64" }
+    },
+
+    "AWSRegionArch2AMI" : {
+      "us-east-1"      : { "64" : "ami-60b6c60a" }
+    }
+  },
+
+  "Resources" : {
+
+    "VPC" : {
+      "Type" : "AWS::EC2::VPC",
+      "Properties" : {
+        "CidrBlock" : "10.0.0.0/16",
+        "Tags" : [
+          {"Key" : "Application", "Value" : { "Ref" : "AWS::StackId"} },
+          {"Key" : "Network", "Value" : "Public" },
+          { "Key": "Name", "Value": "CloudFormation_VPC"}
+        ]
+      }
+    },
+
+    "PublicSubnet" : {
+      "Type" : "AWS::EC2::Subnet",
+      "Properties" : {
+        "VpcId" : { "Ref" : "VPC" },
+        "CidrBlock" : "10.0.0.0/24",
+        "AvailabilityZone" : "us-east-1d",
+        "Tags" : [
+          {"Key" : "Application", "Value" : { "Ref" : "AWS::StackId"} },
+          {"Key" : "Network", "Value" : "Public" },
+          { "Key": "Name", "Value": "Cloudformation_Public_Subnet"}
+        ]
+      }
+    },
+
+    "InternetGateway" : {
+      "Type" : "AWS::EC2::InternetGateway",
+      "Properties" : {
+        "Tags" : [
+          {"Key" : "Application", "Value" : { "Ref" : "AWS::StackId"} },
+          {"Key" : "Network", "Value" : "Public" },
+          { "Key": "Name", "Value": "CloudFormation_Internetgateway"}
+        ]
+      }
+    },
+
+    "AttachGateway" : {
+       "Type" : "AWS::EC2::VPCGatewayAttachment",
+       "Properties" : {
+         "VpcId" : { "Ref" : "VPC" },
+         "InternetGatewayId" : { "Ref" : "InternetGateway" }
+       }
+    },
+
+    "PublicRouteTable" : {
+      "Type" : "AWS::EC2::RouteTable",
+      "Properties" : {
+        "VpcId" : {"Ref" : "VPC"},
+        "Tags" : [
+          {"Key" : "Application", "Value" : { "Ref" : "AWS::StackId"} },
+          {"Key" : "Network", "Value" : "Public" },
+          { "Key": "Name", "Value": "CloudFormation_public_routetable"}
+        ]
+      }
+    },
+
+    "PublicRoute" : {
+      "Type" : "AWS::EC2::Route",
+      "DependsOn" : "AttachGateway",
+      "Properties" : {
+        "RouteTableId" : { "Ref" : "PublicRouteTable" },
+        "DestinationCidrBlock" : "0.0.0.0/0",
+        "GatewayId" : { "Ref" : "InternetGateway" }
+      }
+    },
+
+    "PublicSubnetRouteTableAssociation" : {
+      "Type" : "AWS::EC2::SubnetRouteTableAssociation",
+      "Properties" : {
+        "SubnetId" : { "Ref" : "PublicSubnet" },
+        "RouteTableId" : { "Ref" : "PublicRouteTable" }
+      }
+    },
+
+    "PublicNetworkAcl" : {
+      "Type" : "AWS::EC2::NetworkAcl",
+      "Properties" : {
+        "VpcId" : {"Ref" : "VPC"},
+        "Tags" : [
+          {"Key" : "Application", "Value" : { "Ref" : "AWS::StackId"} },
+          {"Key" : "Network", "Value" : "Public" },
+          {"Key": "Name", "Value": "CloudFormation_publicNetworkacl"}
+        ]
+      }
+    },
+
+    "InboundHTTPPublicNetworkAclEntry" : {
+      "Type" : "AWS::EC2::NetworkAclEntry",
+      "Properties" : {
+        "NetworkAclId" : {"Ref" : "PublicNetworkAcl"},
+        "RuleNumber" : "100",
+        "Protocol" : "6",
+        "RuleAction" : "allow",
+        "Egress" : "false",
+        "CidrBlock" : "0.0.0.0/0",
+        "PortRange" : {"From" : "80", "To" : "80"},
+        "PortRange" : {"From" : "1024", "To" : "65535"}
+      }
+    },
+
+    "InboundDynamicPortsPublicNetworkAclEntry" : {
+      "Type" : "AWS::EC2::NetworkAclEntry",
+      "Properties" : {
+        "NetworkAclId" : {"Ref" : "PublicNetworkAcl"},
+        "RuleNumber" : "101",
+        "Protocol" : "6",
+        "RuleAction" : "allow",
+        "Egress" : "false",
+        "CidrBlock" : "0.0.0.0/0",
+        "PortRange" : {"From" : "1024", "To" : "65535"},
+        "PortRange" : {"From" : "22", "To" : "22"}
+      }
+    },
+
+    "OutboundHTTPPublicNetworkAclEntry" : {
+      "Type" : "AWS::EC2::NetworkAclEntry",
+      "Properties" : {
+        "NetworkAclId" : {"Ref" : "PublicNetworkAcl"},
+        "RuleNumber" : "100",
+        "Protocol" : "6",
+        "RuleAction" : "allow",
+        "Egress" : "true",
+        "CidrBlock" : "0.0.0.0/0",
+        "PortRange" : {"From" : "80", "To" : "80"},
+        "PortRange" : {"From" : "22", "To" : "22"}
+      }
+    },
+
+    "OutBoundDynamicPortPublicNetworkAclEntry" : {
+      "Type" : "AWS::EC2::NetworkAclEntry",
+      "Properties" : {
+        "NetworkAclId" : {"Ref" : "PublicNetworkAcl"},
+        "RuleNumber" : "101",
+        "Protocol" : "6",
+        "RuleAction" : "allow",
+        "Egress" : "true",
+        "CidrBlock" : "0.0.0.0/0",
+        "PortRange" : {"From" : "1024", "To" : "65535"}
+      }
+    },
+
+    "PublicSubnetNetworkAclAssociation" : {
+      "Type" : "AWS::EC2::SubnetNetworkAclAssociation",
+      "Properties" : {
+        "SubnetId" : { "Ref" : "PublicSubnet" },
+        "NetworkAclId" : { "Ref" : "PublicNetworkAcl" }
+      }
+    },
+
+    "PrivateSubnet" : {
+      "Type" : "AWS::EC2::Subnet",
+      "Properties" : {
+        "VpcId" : { "Ref" : "VPC" },
+        "AvailabilityZone" : "us-east-1b",
+        "CidrBlock" : "10.0.1.0/24",
+        "Tags" : [
+          {"Key" : "Application", "Value" : { "Ref" : "AWS::StackId"} },
+          {"Key" : "Network", "Value" : "Private" },
+          { "Key": "Name", "Value": "CloudFormation_private_subnet"}
+        ]
+      }
+    },
+      "PrivateSubnetRDS" : {
+      "Type" : "AWS::EC2::Subnet",
+      "Properties" : {
+        "VpcId" : { "Ref" : "VPC" },
+        "AvailabilityZone" : "us-east-1a",
+        "CidrBlock" : "10.0.2.0/24",
+        "Tags" : [
+          {"Key" : "Application", "Value" : { "Ref" : "AWS::StackId"} },
+          {"Key" : "Network", "Value" : "Private" },
+          { "Key": "Name", "Value": "CloudFormation_private_subnetRDS"}
+        ]
+      }
+    },
+
+
+    "PrivateRouteTable" : {
+      "Type" : "AWS::EC2::RouteTable",
+      "Properties" : {
+        "VpcId" : {"Ref" : "VPC"},
+        "Tags" : [
+          {"Key" : "Application", "Value" : { "Ref" : "AWS::StackId"} },
+          {"Key" : "Network", "Value" : "Private" },
+          {"Key": "Name", "Value": "CloudFormation_Private_route_table"}
+        ]
+      }
+    },
+
+    "PrivateSubnetRouteTableAssociation" : {
+      "Type" : "AWS::EC2::SubnetRouteTableAssociation",
+      "Properties" : {
+        "SubnetId" : { "Ref" : "PrivateSubnet" },
+        "RouteTableId" : { "Ref" : "PrivateRouteTable" }
+      }
+    },
+
+    "PrivateNetworkAcl" : {
+      "Type" : "AWS::EC2::NetworkAcl",
+      "Properties" : {
+        "VpcId" : {"Ref" : "VPC"},
+        "Tags" : [
+          {"Key" : "Application", "Value" : { "Ref" : "AWS::StackId"} },
+          {"Key" : "Network", "Value" : "Private" },
+          { "Key": "Name", "Value": "Cloudformation_PrivateNetworkAcl"}
+        ]
+      }
+    },
+
+    "InboundPrivateNetworkAclEntry" : {
+      "Type" : "AWS::EC2::NetworkAclEntry",
+      "Properties" : {
+        "NetworkAclId" : {"Ref" : "PrivateNetworkAcl"},
+        "RuleNumber" : "100",
+        "Protocol" : "6",
+        "RuleAction" : "allow",
+        "Egress" : "false",
+        "CidrBlock" : "0.0.0.0/0",
+        "PortRange" : {"From" : "0", "To" : "65535"}
+      }
+    },
+
+    "OutBoundPrivateNetworkAclEntry" : {
+      "Type" : "AWS::EC2::NetworkAclEntry",
+      "Properties" : {
+        "NetworkAclId" : {"Ref" : "PrivateNetworkAcl"},
+        "RuleNumber" : "100",
+        "Protocol" : "6",
+        "RuleAction" : "allow",
+        "Egress" : "true",
+        "CidrBlock" : "0.0.0.0/0",
+        "PortRange" : {"From" : "0", "To" : "65535"}
+      }
+    },
+
+    "PrivateSubnetNetworkAclAssociation" : {
+      "Type" : "AWS::EC2::SubnetNetworkAclAssociation",
+      "Properties" : {
+        "SubnetId" : { "Ref" : "PrivateSubnet" },
+        "NetworkAclId" : { "Ref" : "PrivateNetworkAcl" }
+      }
+    },
+
+    "ElasticLoadBalancer" : {
+      "Type" : "AWS::ElasticLoadBalancing::LoadBalancer",
+      "Properties" : {
+        "SecurityGroups" : [ { "Ref" : "LoadBalancerSecurityGroup" } ],
+        "Subnets" : [ { "Ref" : "PublicSubnet" } ],
+        "Listeners" : [ { "LoadBalancerPort" : "80", "InstancePort" : "80", "Protocol" : "HTTP" } ],
+        "HealthCheck" : {
+          "Target" : "HTTP:80/",
+          "HealthyThreshold" : "3",
+          "UnhealthyThreshold" : "5",
+          "Interval" : "90",
+          "Timeout" : "60"
+        }
+      }
+    },
+
+    "LoadBalancerSecurityGroup" : {
+      "Type" : "AWS::EC2::SecurityGroup",
+      "Properties" : {
+        "GroupDescription" : "Enable HTTP access on port 80",
+        "VpcId" : { "Ref" : "VPC" },
+        "SecurityGroupIngress" : [ { "IpProtocol" : "tcp", "FromPort" : "80", "ToPort" : "80", "CidrIp" : "0.0.0.0/0" }],
+        "SecurityGroupEgress" : [ { "IpProtocol" : "tcp", "FromPort" : "80", "ToPort" : "80", "CidrIp" : "0.0.0.0/0"} ]
+      }
+    },
+
+    "WebServerGroup" : {
+      "Type" : "AWS::AutoScaling::AutoScalingGroup",
+      "Properties" : {
+        "AvailabilityZones" : [{ "Fn::GetAtt" : [ "PublicSubnet", "AvailabilityZone" ] }],
+        "VPCZoneIdentifier" : [{ "Ref" : "PublicSubnet" }],
+        "LaunchConfigurationName" : { "Ref" : "LaunchConfig" },
+        "MinSize" : "1",
+        "MaxSize" : "1",
+        "DesiredCapacity" : { "Ref" : "InstanceCount" },
+        "LoadBalancerNames" : [ { "Ref" : "ElasticLoadBalancer" } ],
+        "Tags" : [ {"Key" : "Network", "Value" : "Public", "PropagateAtLaunch" : "true"},
+        {"Key": "Name", "Value": "CloudFormation_EC2_instance","PropagateAtLaunch" : "true"}
+         ]
+      }
+    },
+
+    "LaunchConfig" : {
+      "Type" : "AWS::AutoScaling::LaunchConfiguration",
+      "Properties" : {
+        "KeyName" : { "Ref" : "KeyName" },
+        "AssociatePublicIpAddress" : "true",
+        "ImageId" : { "Fn::FindInMap" : [ "AWSRegionArch2AMI", { "Ref" : "AWS::Region" },
+                                          { "Fn::FindInMap" : [ "AWSInstanceType2Arch", { "Ref" : "InstanceType" },
+                                          "Arch" ] } ] },
+        "UserData" : { "Fn::Base64" : "80" },
+        "SecurityGroups" : [ { "Ref" : "InstanceSecurityGroup" } ],
+        "InstanceType" : { "Ref" : "InstanceType" }
+      }
+    },
+
+    "InstanceSecurityGroup" : {
+      "Type" : "AWS::EC2::SecurityGroup",
+      "Properties" : {
+        "GroupDescription" : "Enable HTTP access on the configured port",
+        "VpcId" : { "Ref" : "VPC" },
+        "SecurityGroupIngress" : [ { "IpProtocol" : "tcp", "FromPort" : "80", "ToPort" : "80", "SourceSecurityGroupId" : { "Ref" : "LoadBalancerSecurityGroup" } }, { "IpProtocol" : "tcp", "FromPort" : "22", "ToPort" : "22", "CidrIp" : "0.0.0.0/0"} ],
+        "Tags" : [ 
+        {"Key": "Name", "Value": "CloudFormation_EC2_sg"}
+         ]
+      }
+    },
+    "InstanceSecurityGroupPrivate" : {
+      "Type" : "AWS::EC2::SecurityGroup",
+      "Properties" : {
+        "GroupDescription" : "Enable HTTP access on the configured port",
+        "VpcId" : { "Ref" : "VPC" },
+        "SecurityGroupIngress" : [ { "IpProtocol" : "tcp", "FromPort" : "3306", "ToPort" : "3306", "SourceSecurityGroupId" : { "Ref" : "InstanceSecurityGroup" } }, { "IpProtocol" : "tcp", "FromPort" : "22", "ToPort" : "22", "CidrIp" : "0.0.0.0/0"} ],
+        "Tags" : [ 
+        {"Key": "Name", "Value": "CloudFormation_EC2_sg_private"}
+         ]
+      }
+      },
+      "Tomcat": {
+        "Type": "AWS::EC2::Instance",
+        "Metadata": {
+            "AWS::CloudFormation::Init": {
+                "config": {
+                    "packages": {
+                        "yum": {
+                            "tomcat7": [],
+                            "git": [],
+                            "elinks" : [],
+                            "httpd" : [],
+                            "tree" : []
+                        },             
+                         "mode"    : "000755",
+                         "owner"   : "root",
+                        "group"   : "root"
+                    }
+                }
+            }
+        },
+      "Properties" : {
+        "KeyName" : { "Ref" : "KeyName" },
+        "InstanceType" : { "Ref" : "InstanceType" },
+        "ImageId" : { "Fn::FindInMap" : [ "AWSRegionArch2AMI", { "Ref" : "AWS::Region" },
+                                          { "Fn::FindInMap" : [ "AWSInstanceType2Arch", { "Ref" : "InstanceType" },
+                                          "Arch" ] } ] },
+        "NetworkInterfaces" : [ 
+          { "DeviceIndex" : "0",
+            "AssociatePublicIpAddress" : "true",
+            "DeleteOnTermination" : "true",
+            "SubnetId" : { "Ref" : "PublicSubnet" },
+            "GroupSet" : [ { "Ref" : "InstanceSecurityGroup" } ]
+          }
+        ],
+        "Tags" : [ 
+        {"Key": "Name", "Value": "CloudFormation_CMS"}
+         ],
+         "UserData"       : { "Fn::Base64" : { "Fn::Join" : ["", [
+      "#!/bin/bash\n",
+      "yum update -y aws-cfn-bootstrap\n",
+      "rm /var/lib/cloud/sem/user-scripts.*\n",
+      "cp /etc/hosts /etc/hosts_bkp\n",
+      "yum install curl wget\n",
+      "yum install python pip httpd\n",
+      "curl https://bootstrap.pypa.io/get-pip.py -o get-pip.py\n",
+      "python get-pip.py\n",
+      "pip install awscli\n",
+      "pip install --upgrade awscli\n",
+      "mkdir /root/.aws\n",
+      "echo \"[default]\" >> /root/.aws/credentials\n",
+      "echo \"aws_access_key_id = XXXXXXXXXX\" >> /root/.aws/credentials\n",
+      "echo \"aws_secret_access_key = XXXXXXXXXXXXXXX\" >> /root/.aws/credentials\n",
+      "echo \"[default]\" >> /root/.aws/config\n",
+      "echo \"output = text\" >> /root/.aws/config\n",
+      "echo \"region = us-east-1\" >> /root/.aws/config\n",
+      "aws rds describe-db-instances --output text --query 'DBInstances[*].Endpoint.Address' > /root/rds-endpoint\n",
+      "cd /root && wget https://s3.amazonaws.com/tndd/DBENDPOINT1.json\n",
+      "sed -i 's/AllowOverride None/'", { "Ref" : "DBUser" }, "'/g'  /etc/httpd/conf/httpd.conf\n",
+     "/opt/aws/bin/cfn-init -v -s ", { "Ref" : "AWS::StackName" },
+      "         -r Tomcat ",
+        "       --access-key XXXXXXXXXXXXX ",
+      "         --secret-key XXXXXXXXXXXXXXXX ",
+
+      "         --region ", { "Ref" : "AWS::Region" }, "\n"
+    
+    ]]}}
+      }},
+   
+    "myDBSubnetGroup" : {
+         "Type" : "AWS::RDS::DBSubnetGroup",
+         "Properties" : {
+            "DBSubnetGroupDescription" : "description",
+            "SubnetIds" : [ {"Ref" : "PrivateSubnet"},{ "Ref" : "PrivateSubnetRDS"} ]
+         }
+         },     
+ 
+    "myDB": {
+      "Type": "AWS::RDS::DBInstance",
+      "Properties": {
+      "AllocatedStorage": "5",
+      "DBInstanceClass": "db.t2.micro",
+      "PubliclyAccessible": "false",
+      "AvailabilityZone" : "us-east-1a",
+      "Engine": "MySQL",
+      "VPCSecurityGroups"  : [ { "Ref" : "InstanceSecurityGroupPrivate" } ],
+      "DBSubnetGroupName" : { "Ref" : "myDBSubnetGroup" },
+      
+      "MasterUsername": {
+        "Ref": "DBUser"
+      },
+      "MasterUserPassword": {
+      "Ref": "DBPassword"
+      }
+      }
+    },
+    "DBSecurityGroup": {
+"Type": "AWS::RDS::DBSecurityGroup",
+"Properties": {
+   "EC2VpcId"              : { "Ref" : "VPC" },
+   "DBSecurityGroupIngress": { "EC2SecurityGroupId": { "Fn::GetAtt" : [ "InstanceSecurityGroup", "GroupId" ] } },
+   "GroupDescription"      : "Frontend Access"
+}
+},
+  "RedisCluster" : {
+      "Type": "AWS::ElastiCache::CacheCluster",
+      "Properties": {
+        "CacheNodeType"           : { "Ref" : "ClusterNodeType" },
+        
+        "Engine"                  : "redis",
+        "NumCacheNodes"           : "1",
+        
+        "ClusterName" : "testing",
+      
+    "CacheSecurityGroupNames" : [ { "Ref" : "RedisClusterSecurityGroup" } ]     
+      }
+    },
+
+   
+       "RedisClusterSecurityGroup": {
+      "Type": "AWS::ElastiCache::SecurityGroup",
+      "Properties": {
+        "Description"  : "Lock the cluster down"
+      }
+    },
+    "WebServerSecurityGroup" : {
+      "Type" : "AWS::EC2::SecurityGroup",
+      "Properties" : {
+        "GroupDescription" : "Enable HTTP and SSH access",
+        "SecurityGroupIngress" : [
+          {"IpProtocol" : "tcp", "FromPort" : "22", "ToPort" : "22", "CidrIp" : "0.0.0.0/0" },
+          {"IpProtocol" : "tcp", "FromPort" : "80", "ToPort" : "80", "CidrIp" : "0.0.0.0/0"}
+        ]
+      }      
+    },  
+
+    "RedisClusterSecurityGroupIngress": {
+      "Type": "AWS::ElastiCache::SecurityGroupIngress",
+      "Properties": {
+        "CacheSecurityGroupName"  : { "Ref" : "RedisClusterSecurityGroup" },
+        "EC2SecurityGroupName"    : { "Ref" : "WebServerSecurityGroup" }
+      }        
+    },
+
+
+    "SubnetGroup" : {
+    "Type" : "AWS::ElastiCache::SubnetGroup",
+    "Properties" : {
+        "Description" : "Cache Subnet Group",
+        "SubnetIds" : [{ "Ref" : "PublicSubnet" }]
+    }
+}
+  
+  },
+
+  "Outputs" : {
+    "URL" : {
+      "Description" : "URL of the website",
+      "Value" :  { "Fn::Join" : [ "", [ "http://", { "Fn::GetAtt" : [ "ElasticLoadBalancer", "DNSName" ]}]]}
+    },
+    "EC2VpcId" : {
+      "Value" : {"Ref":"VPC"}
+    }
+  }
+} 
